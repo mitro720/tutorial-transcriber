@@ -1,0 +1,35 @@
+{
+    "run_timestamp": "2026-03-23T20:07:47.183711",
+    "output_dir": "G:\\project ii\\transcriber\\output\\session_20260323_200747",
+    "steps": {
+        "Extraction": {
+            "status": "Success",
+            "duration_seconds": 7.909130096435547,
+            "video_path": "temp_audio\\downloaded_video.mp4"
+        },
+        "Transcription": {
+            "status": "Success",
+            "duration_seconds": 5.423888921737671,
+            "word_count": 1700
+        },
+        "Detection": {
+            "status": "Success",
+            "duration_seconds": 1192.4147140979767,
+            "moments_count": 22
+        },
+        "Formatting": {
+            "status": "Success",
+            "duration_seconds": 12.787338972091675
+        },
+        "Saving": {
+            "status": "Success",
+            "duration_seconds": 0.021996259689331055
+        }
+    },
+    "source_url": "https://youtu.be/PQtFUFVdjI0?si=C_ExpjKeDyq6n3RH",
+    "models_used": {
+        "transcription": "whisper-large-v3",
+        "llm": "llama-3.3-70b-versatile"
+    },
+    "total_duration_seconds": 1218.557478
+}

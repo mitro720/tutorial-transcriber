@@ -52,21 +52,31 @@ class AudioTranscriber:
         return self.local_model.transcribe(audio_path)
 
 
-    def _transcribe_file(self, file_path):
-        """Helper to transcribe a single file."""
-        with open(file_path, "rb") as file:
-            transcription = self.client.audio.transcriptions.create(
-                file=(os.path.basename(file_path), file.read()),
-                model="whisper-large-v3",
-                response_format="verbose_json",
-                language="en", 
-                temperature=0.0
-            )
-            # transcription is a VerboseJsonResponse object, convert to dict
-            return {
-                "text": transcription.text,
-                "segments": transcription.segments
-            }
+    def _transcribe_file(self, file_path, retries=3):
+        """Helper to transcribe a single file with exponential backoff on rate limits."""
+        import time
+        for attempt in range(retries):
+            try:
+                with open(file_path, "rb") as file:
+                    transcription = self.client.audio.transcriptions.create(
+                        file=(os.path.basename(file_path), file.read()),
+                        model="whisper-large-v3",
+                        response_format="verbose_json",
+                        language="en", 
+                        temperature=0.0
+                    )
+                    return {
+                        "text": transcription.text,
+                        "segments": transcription.segments
+                    }
+            except Exception as e:
+                if "rate_limit" in str(e).lower() or "429" in str(e) and attempt < retries - 1:
+                    wait_time = (2 ** attempt) + 1
+                    print(f"  ! Rate limit hit. Retrying in {wait_time}s... (Attempt {attempt + 1}/{retries})")
+                    time.sleep(wait_time)
+                else:
+                    raise e
+        return None
 
     def _transcribe_chunks(self, audio_path):
         """Chunks audio file into 10-minute segments and transcribes each."""
@@ -86,17 +96,20 @@ class AudioTranscriber:
             chunk.export(chunk_name, format="mp3")
             
             try:
-                print(f"Transcribing chunk {i+1}/{chunks}...")
+                print(f"  > Transcribing chunk {i+1}/{chunks}...")
                 result = self._transcribe_file(chunk_name)
                 
-                # Offset timestamps for segments
-                offset_seconds = start_ms / 1000.0
-                for segment in result.get("segments", []):
-                    segment["start"] += offset_seconds
-                    segment["end"] += offset_seconds
-                    all_segments.append(segment)
-                
-                full_text.append(result.get("text", ""))
+                if result:
+                    # Offset timestamps for segments
+                    offset_seconds = start_ms / 1000.0
+                    for segment in result.get("segments", []):
+                        segment["start"] += offset_seconds
+                        segment["end"] += offset_seconds
+                        all_segments.append(segment)
+                    
+                    full_text.append(result.get("text", ""))
+                else:
+                    print(f"  ! Warning: Chunk {i+1} failed to transcribe.")
             finally:
                 if os.path.exists(chunk_name):
                     os.remove(chunk_name)

@@ -1,4 +1,5 @@
 from groq import Groq
+import json
 
 class TextFormatter:
     def __init__(self, api_key):
@@ -6,22 +7,22 @@ class TextFormatter:
 
     def format_transcript(self, transcript, visuals=None):
         """Formats a raw transcript into a structured Markdown reading guide, embedding visuals."""
-        system_prompt = """
-        You are an expert technical writer. You take raw transcripts from video tutorials and convert them into clean, 
-        highly structured, and easily readable Markdown guides.
-
-        Your tasks:
-        1.  Strip filler words and conversational rambling.
-        2.  Restructure the content into a logical, step-by-step flow.
-        3.  Use clear headers (H1, H2, H3).
-        4.  Use bullet points for lists and steps.
-        5.  Place commands, code snippets, and terminal output in proper code blocks.
-        6.  Add a "Key Takeaways" summary section at the very top.
-        7.  **VISUAL EMBEDDING**: You will be provided with a list of captured visuals (screenshots) with timestamps. 
-            Embed these images in the Markdown guide using `![description](captured_visuals/filename.png)` 
-            at the most relevant point in the text based on the timestamp and context provided.
-
-        Ensure the output is valid Markdown.
+        system_prompt = f"""
+        You are a professional technical writer and video editor. Your job is to transform a raw transcript into a high-quality Markdown tutorial.
+        
+        STRUCTURE:
+        - Use clear H1, H2, and H3 headers.
+        - Use bullet points and bold text to emphasize key takeaways.
+        
+        VISUAL INTEGRATION (CRITICAL):
+        - You will be provided with a JSON list of 'Captured Moments' (screenshots).
+        - Each moment has a 'timestamp', 'screenshot' path, and 'transcript_context'.
+        - You MUST integrate these images into the tutorial.
+        - Use standard Markdown image syntax: ![Action or Slide Description](captured_visuals/filename.png)
+        - Do NOT skip any high-confidence moments.
+        - Place the image IMMEDIATELY after the paragraph that matches its timestamp/context.
+        
+        If no visuals are provided, just format the text normally.
         """
 
         user_content = f"Raw Transcript:\n{transcript}\n\n"

@@ -2,12 +2,17 @@ import cv2
 import os
 import subprocess
 import json
+from dotenv import load_dotenv
 
 class FrameDetector:
     def __init__(self, output_dir="captured_visuals"):
         self.output_dir = output_dir
         if not os.path.exists(self.output_dir):
             os.makedirs(self.output_dir)
+        
+        # Load environment variables for ffmpeg path
+        load_dotenv()
+        self.ffmpeg_path = os.getenv("FFMPEG_PATH", "ffmpeg") # Fallback to "ffmpeg"
         
         self.trigger_words = [
             "here", "this", "look", "see", "notice",
@@ -41,13 +46,14 @@ class FrameDetector:
                     return True, segment["text"]
         return False, ""
 
-    def detect_important_frames(self, video_path, segments, sample_rate_fps=1):
+    def detect_important_frames(self, video_path, segments, sample_rate_fps=1, capture_clips=False):
         """Main detection loop using multiple signals."""
         cap = cv2.VideoCapture(video_path)
         fps = cap.get(cv2.CAP_PROP_FPS)
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         
         # We sample at a lower rate to avoid redundant processing
+        # Use 1 fps by default (one frame per second)
         frame_interval = int(fps / sample_rate_fps) if sample_rate_fps > 0 else 1
         
         important_moments = []
@@ -78,23 +84,31 @@ class FrameDetector:
             if triggered:
                 signals.append("trigger_word")
             
-            # Decision Logic: Flag if high confidence (2+ signals) or unique visual change
-            # We prioritize Transcript Anchors as they give context
-            if len(signals) >= 2 or ("trigger_word" in signals and "text_density" in signals):
-                confidence = "high" if len(signals) >= 2 else "medium"
+            # Decision Logic: Flag if high confidence (2+ signals)
+            if len(signals) >= 2:
+                confidence = "high"
                 
                 # Capture frame
                 frame_name = f"frame_{int(timestamp)}.png"
                 frame_path = os.path.join(self.output_dir, frame_name)
                 cv2.imwrite(frame_path, frame)
                 
-                important_moments.append({
+                moment_data = {
                     "timestamp": float(round(timestamp, 2)),
                     "screenshot": frame_name,
                     "signals": signals,
                     "confidence": confidence,
                     "transcript_context": context
-                })
+                }
+
+                # Capture clip (NEW)
+                if capture_clips:
+                    clip_name = f"clip_{int(timestamp)}.mp4"
+                    print(f"  > Capturing mini-clip: {clip_name}")
+                    self.save_miniclip(video_path, timestamp, clip_name)
+                    moment_data["clip"] = clip_name
+                
+                important_moments.append(moment_data)
                 
             prev_frame = frame.copy()
             
@@ -108,7 +122,7 @@ class FrameDetector:
         output_path = os.path.join(self.output_dir, output_name)
         
         command = [
-            "ffmpeg", "-y", "-ss", str(start),
+            self.ffmpeg_path, "-y", "-ss", str(start),
             "-i", video_path,
             "-t", str(duration),
             "-c", "copy",
