@@ -11,6 +11,7 @@ class AudioDownloader:
         # Look for custom paths in environment variables
         self.yt_dlp_path = os.getenv("YT_DLP_PATH", "yt-dlp")
         self.ffmpeg_path = os.getenv("FFMPEG_PATH", "ffmpeg")
+        self.aria2c_path = os.getenv("ARIA2C_PATH", "aria2c")
 
     def download_from_url(self, url):
         """Downloads audio from a URL using yt-dlp."""
@@ -29,13 +30,37 @@ class AudioDownloader:
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            # If yt-dlp is not in path, we might need to use its exact location
-            # However, yt-dlp library usually handles its own calls if possible.
-            # But for the CLI/External calls, we use self.yt_dlp_path if needed.
             info = ydl.extract_info(url, download=True)
-            # Find the actual filename (e.g., downloaded_audio.mp3)
-            ext = info.get('ext', 'mp3')
-            final_filename = os.path.join(self.output_dir, f"downloaded_audio.mp3")
+            final_filename = os.path.join(self.output_dir, "downloaded_audio.mp3")
+            return final_filename
+
+    def download_video(self, url):
+        """Downloads high-quality 720p video using aria2c and concurrent fragments."""
+        output_tmpl = os.path.join(self.output_dir, "downloaded_video.%(ext)s")
+        ydl_opts = {
+            'ffmpeg_location': self.ffmpeg_path if self.ffmpeg_path != "ffmpeg" else None,
+            # Best 720p mp4 for visual clarity + efficiency
+            'format': 'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best',
+            'outtmpl': output_tmpl,
+            'external_downloader': self.aria2c_path if self.aria2c_path != "aria2c" else 'aria2c',
+            'external_downloader_args': [
+                '--min-split-size=1M',
+                '--max-connection-per-server=16',
+                '--max-concurrent-downloads=16',
+                '--split=16'
+            ],
+            'concurrent_fragment_downloads': 16,
+            'retries': 10,
+            'fragment_retries': 10,
+            'merge_output_format': 'mp4',
+            'quiet': True,
+            'no_warnings': True,
+        }
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            ext = info.get('ext', 'mp4')
+            final_filename = os.path.join(self.output_dir, f"downloaded_video.{ext}")
             return final_filename
 
     def extract_from_local(self, input_path):

@@ -27,13 +27,17 @@ def main():
         return
 
     # 1. Extraction
-    print(f"--- Step 1: Extracting audio from {args.input} ---")
+    print(f"--- Step 1: Extractions from {args.input} ---")
     downloader = AudioDownloader()
     
     if args.local or os.path.exists(args.input):
         audio_path = downloader.extract_from_local(args.input)
+        video_path = args.input if not args.input.endswith((".mp3", ".wav", ".m4a")) else None
     else:
-        audio_path = downloader.download_from_url(args.input)
+        print("Downloading video for dissection...")
+        video_path = downloader.download_video(args.input)
+        print("Extracting audio for transcription...")
+        audio_path = downloader.extract_from_local(video_path)
 
     if not audio_path or not os.path.exists(audio_path):
         print("Failed to obtain audio file.")
@@ -53,10 +57,6 @@ def main():
     
     # 2.5 Visual Detection (New!)
     visuals = None
-    # We only run detection if it's a video file or if we have a way to access the frames.
-    # yt-dlp might have deleted the video, but if it exists, we use it.
-    video_path = args.input if os.path.exists(args.input) and not args.input.endswith((".mp3", ".wav", ".m4a")) else None
-    
     if video_path:
         print("--- Step 2.5: Detecting important frames and visuals ---")
         detector = FrameDetector()
