@@ -1,0 +1,7 @@
+yt-dlp
+pydub
+python-dotenv
+groq
+requests
+openai-whisper
+torch
