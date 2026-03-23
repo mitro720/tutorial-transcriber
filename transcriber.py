@@ -27,10 +27,15 @@ class AudioTranscriber:
         
         try:
             if file_size_mb <= self.max_file_size_mb:
-                return self._transcribe_file(audio_path)
+                result = self._transcribe_file(audio_path)
             else:
                 print(f"File size ({file_size_mb:.2f}MB) exceeds limits. Chunking...")
-                return self._transcribe_chunks(audio_path)
+                result = self._transcribe_chunks(audio_path)
+            
+            return {
+                "text": result.get("text", ""),
+                "segments": result.get("segments", [])
+            }
         except Exception as e:
             print(f"Groq transcription failed: {e}. Falling back to local...")
             return self._transcribe_locally(audio_path)
@@ -38,7 +43,7 @@ class AudioTranscriber:
     def _transcribe_locally(self, audio_path):
         """Helper to use local Whisper model."""
         if LocalTranscriber is None:
-            print("Error: openai-whisper is not installed. Local transcription unavailable.")
+            print("Error: openai-whisper\ntorch\nopencv-python\n is not installed. Local transcription unavailable.")
             return None
         
         if not self.local_model:
@@ -53,11 +58,15 @@ class AudioTranscriber:
             transcription = self.client.audio.transcriptions.create(
                 file=(os.path.basename(file_path), file.read()),
                 model="whisper-large-v3",
-                response_format="json",
-                language="en", # Assuming English for tutorials, can be made optional
+                response_format="verbose_json",
+                language="en", 
                 temperature=0.0
             )
-            return transcription.text
+            # transcription is a VerboseJsonResponse object, convert to dict
+            return {
+                "text": transcription.text,
+                "segments": transcription.segments
+            }
 
     def _transcribe_chunks(self, audio_path):
         """Chunks audio file into 10-minute segments and transcribes each."""
@@ -66,22 +75,33 @@ class AudioTranscriber:
         chunk_length_ms = 10 * 60 * 1000 
         chunks = math.ceil(len(audio) / chunk_length_ms)
         
-        full_transcript = []
+        full_text = []
+        all_segments = []
         
         for i in range(chunks):
-            start_time = i * chunk_length_ms
-            end_time = (i + 1) * chunk_length_ms
-            chunk = audio[start_time:end_time]
+            start_ms = i * chunk_length_ms
+            chunk = audio[start_ms : (i + 1) * chunk_length_ms]
             
             chunk_name = f"chunk_{i}.mp3"
             chunk.export(chunk_name, format="mp3")
             
             try:
                 print(f"Transcribing chunk {i+1}/{chunks}...")
-                transcript = self._transcribe_file(chunk_name)
-                full_transcript.append(transcript)
+                result = self._transcribe_file(chunk_name)
+                
+                # Offset timestamps for segments
+                offset_seconds = start_ms / 1000.0
+                for segment in result.get("segments", []):
+                    segment["start"] += offset_seconds
+                    segment["end"] += offset_seconds
+                    all_segments.append(segment)
+                
+                full_text.append(result.get("text", ""))
             finally:
                 if os.path.exists(chunk_name):
                     os.remove(chunk_name)
                     
-        return " ".join(full_transcript)
+        return {
+            "text": " ".join(full_text),
+            "segments": all_segments
+        }

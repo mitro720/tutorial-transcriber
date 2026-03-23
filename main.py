@@ -1,9 +1,12 @@
 import os
 import argparse
+from groq import Groq
+import json
 from dotenv import load_dotenv
 from downloader import AudioDownloader
 from transcriber import AudioTranscriber
 from formatter import TextFormatter
+from detector import FrameDetector
 
 def main():
     # Load environment variables
@@ -39,17 +42,32 @@ def main():
     # 2. Transcription
     print(f"--- Step 2: Transcribing audio ({'Local' if args.local_whisper else 'Groq Whisper'}) ---")
     transcriber = AudioTranscriber(api_key, use_local=args.local_whisper)
-    raw_transcript = transcriber.transcribe(audio_path)
+    transcription_result = transcriber.transcribe(audio_path)
     
-    if not raw_transcript:
+    if not transcription_result or not transcription_result.get("text"):
         print("Transcription failed.")
         return
 
+    raw_transcript = transcription_result["text"]
+    segments = transcription_result["segments"]
+    
+    # 2.5 Visual Detection (New!)
+    visuals = None
+    # We only run detection if it's a video file or if we have a way to access the frames.
+    # yt-dlp might have deleted the video, but if it exists, we use it.
+    video_path = args.input if os.path.exists(args.input) and not args.input.endswith((".mp3", ".wav", ".m4a")) else None
+    
+    if video_path:
+        print("--- Step 2.5: Detecting important frames and visuals ---")
+        detector = FrameDetector()
+        visuals = detector.detect_important_frames(video_path, segments)
+        print(f"Captured {len(visuals)} important moments.")
+    
     # 3. Formatting
     if api_key:
         print("--- Step 3: Formatting into Markdown (Groq Llama-3) ---")
         formatter = TextFormatter(api_key)
-        markdown_guide = formatter.format_transcript(raw_transcript)
+        markdown_guide = formatter.format_transcript(raw_transcript, visuals=visuals)
     else:
         print("--- Step 3: Skipping Formatting (GROQ_API_KEY missing) ---")
         markdown_guide = raw_transcript
