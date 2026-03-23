@@ -12,6 +12,7 @@ __pycache__/
 
 # Temporary Folders / Outputs
 temp_audio/
+output/
 guide.md
 
 # VS Code
